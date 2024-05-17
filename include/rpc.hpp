@@ -678,14 +678,14 @@ inline namespace server
         ///@param func_name Name to bind the callback to
         ///@param func_ptr Pointer to callback that runs when dispatch is called with bound name
         template<typename R, typename... Args>
-        void bind_cached(std::string func_name, R (*func_ptr)(Args...))
+        void bind_cached(std::string func_name, std::function<R(Args...)> &&func)
         {
             m_dispatch_table.emplace(std::move(func_name),
-                [this, func_ptr](typename Serial::serial_t& serial_obj)
+                [this, func = std::forward<decltype(func)>(func)](typename Serial::serial_t& serial_obj)
                 {
                     try
                     {
-                        dispatch_cached_func(func_ptr, serial_obj);
+                        dispatch_cached_func(std::forward<decltype(func)>(func), serial_obj);
                     }
                     catch (const rpc_exception& ex)
                     {
@@ -701,12 +701,12 @@ inline namespace server
         ///@tparam F Callback type (could be function or lambda or functor)
         ///@param func_name Name to bind the callback to
         ///@param func Callback to run when dispatch is called with bound name
-        template<typename R, typename... Args, typename F>
-        RPC_HPP_INLINE void bind_cached(std::string func_name, F&& func)
+        template<typename R, typename... Args>
+        RPC_HPP_INLINE void bind_cached(std::string func_name, R (*func_ptr)(Args...))
         {
-            using fptr_t = R (*)(Args...);
+            using fptr_t = std::function<R(Args...)>;
 
-            bind_cached(std::move(func_name), fptr_t{ std::forward<F>(func) });
+            bind_cached(std::move(func_name), fptr_t{ func_ptr });
         }
 
         ///@brief Binds a string to a callback
@@ -716,14 +716,14 @@ inline namespace server
         ///@param func_name Name to bind the callback to
         ///@param func_ptr Pointer to callback that runs when dispatch is called with bound name
         template<typename R, typename... Args>
-        void bind(std::string func_name, R (*func_ptr)(Args...))
+        void bind(std::string func_name, std::function<R(Args...)> &&func)
         {
             m_dispatch_table.emplace(std::move(func_name),
-                [func_ptr](typename Serial::serial_t& serial_obj)
+                [func = std::forward<decltype(func)>(func)](typename Serial::serial_t& serial_obj)
                 {
                     try
                     {
-                        dispatch_func(func_ptr, serial_obj);
+                        dispatch_func(std::forward<decltype(func)>(func), serial_obj);
                     }
                     catch (const rpc_exception& ex)
                     {
@@ -739,12 +739,12 @@ inline namespace server
         ///@tparam F Callback type (could be function or lambda or functor)
         ///@param func_name Name to bind the callback to
         ///@param func Callback to run when dispatch is called with bound name
-        template<typename R, typename... Args, typename F>
-        RPC_HPP_INLINE void bind(std::string func_name, F&& func)
+        template<typename R, typename... Args>
+        RPC_HPP_INLINE void bind(std::string func_name, R (*func_ptr)(Args...))
         {
-            using fptr_t = R (*)(Args...);
+            using fptr_t = std::function<R(Args...)>;
 
-            bind(std::move(func_name), fptr_t{ std::forward<F>(func) });
+            bind(std::move(func_name), fptr_t{ func_ptr });
         }
 
         ///@brief Parses the received serialized data and determines which function to call
@@ -782,7 +782,7 @@ inline namespace server
 
 #  if defined(RPC_HPP_SERVER_IMPL) && defined(RPC_HPP_ENABLE_SERVER_CACHE)
         template<typename R, typename... Args>
-        void dispatch_cached_func(R (*func)(Args...), typename Serial::serial_t& serial_obj)
+        void dispatch_cached_func(std::function<R(Args...)> &func, typename Serial::serial_t& serial_obj)
         {
             RPC_HPP_PRECONDITION(func != nullptr);
 
@@ -827,12 +827,12 @@ inline namespace server
                     }
                 }
 
-                run_callback(func, pack);
+                run_callback(std::forward<decltype(func)>(func), pack);
                 result_cache[std::move(bytes)] = pack.get_result();
             }
             else
             {
-                run_callback(func, pack);
+                run_callback(std::forward<decltype(func)>(func), pack);
             }
 
             try
@@ -851,14 +851,14 @@ inline namespace server
 #  else
         template<typename R, typename... Args>
         RPC_HPP_INLINE void dispatch_cached_func(
-            R (*func)(Args...), typename Serial::serial_t& serial_obj) const
+            const std::function<R(Args...)> &&func, typename Serial::serial_t& serial_obj) const
         {
-            dispatch_func(func, serial_obj);
+            dispatch_func(std::forward<decltype(func)>(func), serial_obj);
         }
 #  endif
 
         template<typename R, typename... Args>
-        static void dispatch_func(R (*func)(Args...), typename Serial::serial_t& serial_obj)
+        static void dispatch_func(const std::function<R(Args...)> &&func, typename Serial::serial_t& serial_obj)
         {
             RPC_HPP_PRECONDITION(func != nullptr);
 
@@ -878,7 +878,7 @@ inline namespace server
                 }
             }();
 
-            run_callback(func, pack);
+            run_callback(std::forward<decltype(func)>(func), pack);
 
             try
             {
@@ -896,7 +896,7 @@ inline namespace server
 
     private:
         template<typename R, typename... Args>
-        static void run_callback(R (*func)(Args...), detail::packed_func<R, Args...>& pack)
+        static void run_callback(const std::function<R(Args...)> &&func, detail::packed_func<R, Args...>& pack)
         {
             RPC_HPP_PRECONDITION(func != nullptr);
 
@@ -1034,7 +1034,7 @@ inline namespace client
         ///@note nodiscard because an expensive remote procedure call is being performed
         template<typename R, typename... Args>
         [[nodiscard]] R call_header_func_impl(
-            [[maybe_unused]] R (*func)(Args...), std::string func_name, Args&&... args)
+            [[maybe_unused]] std::function<R(Args...)> &func, std::string func_name, Args&&... args)
         {
             RPC_HPP_PRECONDITION(!func_name.empty());
 
