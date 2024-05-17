@@ -223,7 +223,7 @@ namespace adapters
             {
                 return arg.is_string();
             }
-            else if constexpr (detail::is_container_v<T>)
+            else if constexpr (detail::is_container_v<T> && !std::is_same_v<T, nlohmann::json>)
             {
                 return arg.is_array();
             }
@@ -246,8 +246,8 @@ namespace adapters
         {
             using no_ref_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
-            if constexpr (std::is_arithmetic_v<no_ref_t> || std::is_same_v<no_ref_t, std::string>)
-            {
+            if constexpr (std::is_arithmetic_v<no_ref_t> || std::is_same_v<no_ref_t, std::string> ||
+                          std::is_same_v<no_ref_t, nlohmann::json>) {
                 obj = std::forward<T>(arg);
             }
             else if constexpr (detail::is_container_v<no_ref_t>)
@@ -259,6 +259,18 @@ namespace adapters
                 {
                     push_args(std::forward<decltype(val)>(val), obj);
                 }
+            }
+            else if constexpr (detail::is_tuple<no_ref_t>::value)
+            {
+                obj = nlohmann::json::array();
+                obj.get_ref<nlohmann::json::array_t&>().reserve(std::tuple_size<no_ref_t>::value);
+                unsigned arg_counter = 0;
+
+                detail::for_each_tuple(arg, [&obj, &arg_counter](auto &&val){
+                    nlohmann::json tmp{};
+                    push_arg(std::forward<decltype(val)>(val), tmp);
+                    obj[arg_counter++] = std::move(tmp);
+                });
             }
             else if constexpr (detail::is_serializable_v<njson_adapter, no_ref_t>)
             {
@@ -290,7 +302,11 @@ namespace adapters
                 throw function_mismatch(mismatch_string(typeid(T).name(), arg));
             }
 
-            if constexpr (std::is_arithmetic_v<no_ref_t> || std::is_same_v<no_ref_t, std::string>)
+            if constexpr (std::is_same_v<no_ref_t, nlohmann::json>)
+            {
+                return arg;
+            }
+            else if constexpr (std::is_arithmetic_v<no_ref_t> || std::is_same_v<no_ref_t, std::string>)
             {
                 return arg.get<no_ref_t>();
             }
@@ -304,9 +320,20 @@ namespace adapters
 
                 for (const auto& val : arg)
                 {
+                    // TODO val -> arg? Note that the first argument of parse_args requires an array
                     container.push_back(parse_args<value_t>(val, arg_counter));
                 }
 
+                return container;
+            }
+            else if constexpr (detail::is_tuple_v<no_ref_t>)
+            {
+                no_ref_t container{};
+                unsigned arg_counter = 0;
+
+                detail::for_each_tuple(container, [&arg, &arg_counter](auto &val) {
+                    val = parse_args<decltype(val)>(arg, arg_counter);
+                });
                 return container;
             }
             else if constexpr (detail::is_serializable_v<njson_adapter, no_ref_t>)

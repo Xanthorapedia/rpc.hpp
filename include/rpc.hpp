@@ -379,6 +379,15 @@ namespace detail
     template<typename C>
     inline constexpr bool is_container_v = is_container<C>::value;
 
+    template <typename>
+    struct is_tuple: std::false_type {};
+
+    template <typename ...T>
+    struct is_tuple<std::tuple<T...>>: std::true_type {};
+
+    template<typename T>
+    inline constexpr bool is_tuple_v = is_tuple<T>::value;
+
     template<typename F, typename... Ts, size_t... Is>
     constexpr void for_each_tuple(const std::tuple<Ts...>& tuple, const F& func,
         [[maybe_unused]] std::index_sequence<Is...> iseq)
@@ -389,6 +398,20 @@ namespace detail
 
     template<typename F, typename... Ts>
     constexpr void for_each_tuple(const std::tuple<Ts...>& tuple, const F& func)
+    {
+        for_each_tuple(tuple, func, std::make_index_sequence<sizeof...(Ts)>());
+    }
+
+    template<typename F, typename... Ts, size_t... Is>
+    constexpr void for_each_tuple(std::tuple<Ts...>& tuple, const F& func,
+                                  [[maybe_unused]] std::index_sequence<Is...> iseq)
+    {
+        using expander = int[];
+        std::ignore = expander{ 0, ((void)func(std::get<Is>(tuple)), 0)... };
+    }
+
+    template<typename F, typename... Ts>
+    constexpr void for_each_tuple(std::tuple<Ts...>& tuple, const F& func)
     {
         for_each_tuple(tuple, func, std::make_index_sequence<sizeof...(Ts)>());
     }
