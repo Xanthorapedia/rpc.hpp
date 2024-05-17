@@ -58,7 +58,8 @@ namespace adapters
     public:
         [[nodiscard]] static std::string to_bytes(nlohmann::json&& serial_obj)
         {
-            return std::move(serial_obj).dump();
+            auto msg_pack = nlohmann::json::to_msgpack(serial_obj);
+            return {msg_pack.begin(), msg_pack.end()};
         }
 
         [[nodiscard]] static std::optional<nlohmann::json> from_bytes(std::string&& bytes)
@@ -67,7 +68,7 @@ namespace adapters
 
             try
             {
-                obj = nlohmann::json::parse(std::move(bytes));
+                obj = nlohmann::json::from_msgpack(bytes);
             }
             catch (const nlohmann::json::parse_error&)
             {
