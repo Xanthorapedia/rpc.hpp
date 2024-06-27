@@ -63,7 +63,9 @@ if(${BUILD_ADAPTER_NJSON})
   target_include_directories(njson_adapter
                             INTERFACE "${PROJECT_SOURCE_DIR}/include")
   target_compile_definitions(njson_adapter INTERFACE RPC_HPP_ENABLE_NJSON)
-  find_package(nlohmann_json CONFIG REQUIRED)
+  if (NOT TARGET nlohmann_json::nlohmann_json)
+    find_package(nlohmann_json CONFIG REQUIRED)
+  endif ()
   target_link_libraries(njson_adapter INTERFACE nlohmann_json::nlohmann_json)
 
   install(FILES "rpc_njson.hpp"
